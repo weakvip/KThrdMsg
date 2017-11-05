@@ -48,7 +48,7 @@ static int AddEvent(int epfd, int fd, int mask)
 
 typedef struct thrd_msg_inner_s {
 	size_t size;
-	void* data;	
+	void* data;
 }thrd_msg_inner_t;
 
 thrd_msg_mgr_p MSG_API CreateThrdMsgMgr(void)
@@ -107,24 +107,33 @@ int MSG_API PushMsg(thrd_msg_mgr_p obj, void* data, int size)
 	if (!obj) return -1;
 
 	thrd_msg_inner_t msg = { size, data };
-	int n = write(obj->pipefd[1], &msg, sizeof(msg));
-	if (n <= 0) {
-		return -1;
+	size_t write_size = sizeof(msg);
+	size_t try_cnt = 100;
+	while (write_size) {
+		int n = write(obj->pipefd[1], &msg - (sizeof(msg) - write_size), write_size);
+		if (n <= 0 && 0 == --try_cnt) {
+			return -1;
+		}
+		write_size -= n;
+		if (write_size) {
+			usleep(1);
+		}		
 	}
+
 	__sync_fetch_and_add(&obj->msgCnt, 1);
 	return 0;
 }
 
 int MSG_API PopMsg(thrd_msg_mgr_p obj, int timeout, void** data, int* size)
 {
-	if (!obj || !data ||!size) {
+	if (!obj || !data || !size) {
 		return -1;
 	}
 
 	do {
 		thrd_msg_inner_t msg;
 		int n = read(obj->pipefd[0], &msg, sizeof(msg));
-		if (n>0) {
+		if (n > 0) {
 			__sync_fetch_and_sub(&obj->msgCnt, 1);
 			*size = msg.size;
 			*data = msg.data;

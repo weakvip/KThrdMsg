@@ -16,7 +16,7 @@ int main()
 	else {
 		std::chrono::time_point<std::chrono::system_clock> p1, p2;
 		const int cnBufSize = 20;
-		const int cnLoopCnt = 10000;
+		const int cnLoopCnt = 100;
 
 		for (;;) {
 			int cnt = 0;
