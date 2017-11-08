@@ -11,6 +11,11 @@
 #define AE_WRITEABLE 2
 #define MAX_EVENTS 64
 
+typedef struct thrd_msg_inner_s {
+	size_t size;
+	void* data;
+}thrd_msg_inner_t;
+
 static int SetFdNonblocking(int fd)
 {
 	int flag = fcntl(fd, F_GETFL, 0);
@@ -46,19 +51,13 @@ static int AddEvent(int epfd, int fd, int mask)
 	return 0;
 }
 
-typedef struct thrd_msg_inner_s {
-	size_t size;
-	void* data;
-}thrd_msg_inner_t;
-
 thrd_msg_mgr_p MSG_API CreateThrdMsgMgr(void)
 {
 	thrd_msg_mgr_p pRet = (thrd_msg_mgr_p)malloc(sizeof(thrd_msg_mgr_t));
 	if (!pRet) {
 		return 0;
 	}
-
-	pRet->msgCnt = 0;
+	memset(pRet, 0, sizeof(thrd_msg_mgr_t));
 
 	if (pipe(pRet->pipefd) < 0) {
 		return 0;
@@ -117,7 +116,7 @@ int MSG_API PushMsg(thrd_msg_mgr_p obj, void* data, int size)
 		write_size -= n;
 		if (write_size) {
 			usleep(1);
-		}		
+		}
 	}
 
 	__sync_fetch_and_add(&obj->msgCnt, 1);
@@ -132,8 +131,14 @@ int MSG_API PopMsg(thrd_msg_mgr_p obj, int timeout, void** data, int* size)
 
 	do {
 		thrd_msg_inner_t msg;
-		int n = read(obj->pipefd[0], &msg, sizeof(msg));
-		if (n > 0) {
+		size_t to_read = sizeof(msg);
+		int r = read(obj->pipefd[0], &msg, to_read);
+		if (r > 0) {
+			if (r<to_read) {
+				//save to stack
+				fprintf(stderr, "catch tiny read result\n");
+				assert(0);
+			}
 			__sync_fetch_and_sub(&obj->msgCnt, 1);
 			*size = msg.size;
 			*data = msg.data;
